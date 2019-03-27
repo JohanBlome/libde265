@@ -44,6 +44,7 @@ extern "C" {
 
 #include "VideoWidget.hh"
 #include "de265.h"
+#include <vector>
 
 
 class VideoDecoder : public QThread
@@ -63,6 +64,7 @@ public slots:
   void startDecoder();
   void stopDecoder();
   void singleStepDecoder();
+  void singleStepBackDecoder();
 
   void showCBPartitioning(bool flag);
   void showTBPartitioning(bool flag);
@@ -92,6 +94,7 @@ private:
   QImage mImgBuffers[2];
   int    mNextBuffer;
   int    mFrameCount;
+  int    mTargetFrame;
 
   bool   mPlayingVideo;
   bool   mVideoEnded;
@@ -124,6 +127,8 @@ private:
   int height;
   void convert_frame_swscale(const de265_image* img, QImage & qimg);
 #endif
+
+  int seek_idr_nal(int frame);
 };
 
 #endif

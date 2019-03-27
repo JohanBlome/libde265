@@ -44,6 +44,7 @@ VideoDecoder::VideoDecoder()
     img(NULL),
     mNextBuffer(0),
     mFrameCount(0),
+    mTargetFrame(0),
     mPlayingVideo(false),
     mVideoEnded(false),
     mSingleStep(false),
@@ -99,13 +100,76 @@ void VideoDecoder::startDecoder()
 void VideoDecoder::stopDecoder()
 {
   if (!mPlayingVideo) { return; }
-
+  mTargetFrame=mFrameCount - 1;
   mPlayingVideo=false;
+}
+
+//Find idr previous to num nal
+int VideoDecoder::seek_idr_nal(int num) {
+  uint8_t buf[4096];
+  //Search for start prefix 0x00 00 00 01 or 0x00 00 01
+  fseek(mFH, 0, SEEK_SET);
+  int read = 1;
+  int nalCounter = 0;
+  long lastIndex = 0;
+  long totalRead =0;
+  int idrNum = 0;
+
+  while (read > 0 && nalCounter < num) {
+    totalRead += read;
+    read = fread(buf,1,sizeof(buf), mFH);
+
+    for(int i = 2; i < read && nalCounter < num; i++) {
+      if (i > 3 && buf[i] == 1 &&
+            buf[i - 1] == 0 &&
+            buf[i - 2] == 0 &&
+            buf[i - 3] == 0) {
+
+        uint8_t nal = (buf[i + 1] >> 1) & 0x3f;
+        //Skip pps/sps etc
+        if (isIdrPic(nal)) {
+          lastIndex = totalRead + i - 3;
+          idrNum = nalCounter;
+        } else if (nal == NAL_UNIT_TRAIL_R) {
+          nalCounter++;
+        }
+      } else if (buf[i] == 1 &&
+        buf[i - 1] == 0 &&
+        buf[i - 2] == 0) {
+
+        uint8_t nal = (buf[i + 1] >> 1) & 0x3f;
+        //Skip pps/sps etc
+        if (isIdrPic(nal)) {
+          lastIndex = totalRead + i - 4;
+          idrNum = nalCounter;
+        } else if (nal == NAL_UNIT_TRAIL_R) {
+          nalCounter++;
+        }
+      }
+    }
+  }
+
+  fseek(mFH, lastIndex, SEEK_SET);
+  return idrNum;
 }
 
 void VideoDecoder::singleStepDecoder()
 {
-  if (mPlayingVideo || mVideoEnded) { return; }
+  if (mPlayingVideo || mPlayingVideo) { return; }
+  mTargetFrame++;
+  mPlayingVideo=true;
+  mSingleStep=true;
+  exit();
+}
+
+void VideoDecoder::singleStepBackDecoder()
+{
+  if (mPlayingVideo || mVideoEnded || mFrameCount == 0) { return; }
+  de265_reset(ctx);
+  mTargetFrame = (mTargetFrame > 0)? mTargetFrame - 1: 0;
+  mFrameCount = seek_idr_nal(mTargetFrame);
+  img = NULL;
+  de265_release_next_picture(ctx);
 
   mPlayingVideo=true;
   mSingleStep=true;
@@ -114,64 +178,63 @@ void VideoDecoder::singleStepDecoder()
 
 void VideoDecoder::decoder_loop()
 {
-  for (;;)
-    {
-      if (mPlayingVideo) {
-        mutex.lock();
-
+for (;;) {
+    if (mPlayingVideo) {
+      mutex.lock();
+      while (!mSingleStep || mFrameCount < mTargetFrame) {
         if (img) {
           img = NULL;
           de265_release_next_picture(ctx);
+          mFrameCount++;
         }
 
         img = de265_peek_next_picture(ctx);
-        while (img==NULL)
-          {
-            mutex.unlock();
-            int more=1;
-            de265_error err = de265_decode(ctx, &more);
-            mutex.lock();
+        while (img==NULL) {
+          mutex.unlock();
+          int more=1;
 
-            if (more && err == DE265_OK) {
-              // try again to get picture
+          de265_error err = de265_decode(ctx, &more);
+          mutex.lock();
 
-              img = de265_peek_next_picture(ctx);
-            }
-            else if (more && err == DE265_ERROR_WAITING_FOR_INPUT_DATA) {
-              uint8_t buf[4096];
-              int buf_size = fread(buf,1,sizeof(buf),mFH);
-              int err = de265_push_data(ctx,buf,buf_size ,0,0);
-            }
-            else if (!more)
-              {
-                mVideoEnded=true;
-                mPlayingVideo=false; // TODO: send signal back
-                break;
-              }
+          if (more && err == DE265_OK) {
+            // try again to get picture
+            img = de265_peek_next_picture(ctx);
           }
-
-
-        // show one decoded picture
-
-        if (img) {
-          show_frame(img);
-
-          if (mSingleStep) {
-            mSingleStep=false;
-            mPlayingVideo=false;
+          else if (more && err == DE265_ERROR_WAITING_FOR_INPUT_DATA) {
+            uint8_t buf[4096];
+            int buf_size = fread(buf,1,sizeof(buf),mFH);
+            de265_error err = de265_push_data(ctx,buf,buf_size ,0,0);
+          }
+          else if (!more) {
+            mVideoEnded=true;
+            mPlayingVideo=false; // TODO: send signal back
+            break;
           }
         }
 
-        mutex.unlock();
-
-        // process events
-
-        QCoreApplication::processEvents();
+        if (!mSingleStep) {
+          break;
+        }
       }
-      else {
-        exec();
+
+      // show one decoded picture
+      if (img) {
+        show_frame(img);
       }
+      if (mSingleStep) {
+        mSingleStep=false;
+        mPlayingVideo=false;
+      }
+
+      mutex.unlock();
+
+      // process events
+      QCoreApplication::processEvents();
     }
+    else {
+      exec();
+    }
+  }
 }
 
 #ifdef HAVE_VIDEOGFX
@@ -261,7 +324,7 @@ void VideoDecoder::convert_frame_swscale(const de265_image* img, QImage & qimg)
 
 void VideoDecoder::show_frame(const de265_image* img)
 {
-  if (mFrameCount==0) {
+  if (mImgBuffers[0].width() != img->get_width()) {
     mImgBuffers[0] = QImage(QSize(img->get_width(),img->get_height()), QImage::Format_RGB32);
     mImgBuffers[1] = QImage(QSize(img->get_width(),img->get_height()), QImage::Format_RGB32);
   }
@@ -331,9 +394,17 @@ void VideoDecoder::show_frame(const de265_image* img)
       draw_Tiles(img, ptr, bpl, 4);
     }
 
+  QPainter p;
+  p.begin(qimg);
+  p.setPen(QPen(Qt::red));
+  p.setFont(QFont("Times", 12, QFont::Bold));
+  char buf[64];
+  sprintf(buf,"frame: %d - %d", mFrameCount, img->PicOrderCntVal);
+  const QString text = QString(buf);
+  p.drawText(QPoint(50, 50), text);
+  p.end();
   emit displayImage(qimg);
   mNextBuffer = 1-mNextBuffer;
-  mFrameCount++;
 }
 
 
