@@ -59,6 +59,9 @@ void VideoWidget::paintEvent(QPaintEvent *event)
   QPainter painter(this);
 
   if (mImg) {
+    if (this->width() != mImg->width()) {
+      this->window()->resize(mImg->width(), mImg->height() + 150);
+    }
     QRect videoRect = mImg->rect();
     videoRect.moveCenter(this->rect().center());
 
