@@ -246,7 +246,7 @@ void draw_QuantPY_block(const de265_image* srcimg,uint8_t* img,int stride,
   uint32_t col = 0xFF * f;
   col = col | (col<<8) | (col<<16);
 
-  fill_rect(img,stride, x0,y0,w,h, col, pixelSize);
+  tint_rect(img,stride, x0,y0,w,h, col, pixelSize);
 }
 
 
