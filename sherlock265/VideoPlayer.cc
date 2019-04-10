@@ -41,11 +41,19 @@ VideoPlayer::VideoPlayer(const char* filename)
   startButton = new QPushButton("&Start");
   QObject::connect(startButton, SIGNAL(clicked()), mDecoder, SLOT(startDecoder()));
 
-  QPushButton* forwardButton = new QPushButton(">");
+  QPushButton* forwardButton = new QPushButton("->");
   QObject::connect(forwardButton, SIGNAL(clicked()), mDecoder, SLOT(singleStepDecoder()));
 
-  QPushButton* backwardButton = new QPushButton("<");
+  QPushButton* backwardButton = new QPushButton("<-");
   QObject::connect(backwardButton, SIGNAL(clicked()), mDecoder, SLOT(singleStepBackDecoder()));
+
+  QPushButton* rewindButton = new QPushButton("Rewind");
+  QObject::connect(rewindButton, SIGNAL(clicked()), mDecoder, SLOT(rewindDecoder()));
+
+  QPushButton* infoButton = new QPushButton("Frame info");
+  infoButton->setCheckable(true);
+  QObject::connect(infoButton, SIGNAL(toggled(bool)),
+                   mDecoder, SLOT(showFrameInfo(bool)));
 
   QObject::connect(mDecoder,    SIGNAL(displayImage(QImage*)),
                    videoWidget, SLOT(setImage(QImage*)), Qt::QueuedConnection);
@@ -104,25 +112,27 @@ VideoPlayer::VideoPlayer(const char* filename)
                    mDecoder, SLOT(showDecodedImage(bool)));
 
   QGridLayout *layout = new QGridLayout;
-  layout->addWidget(videoWidget, 0,0,1,7);
+  layout->addWidget(videoWidget, 0,0,1,8);
   layout->addWidget(startButton, 1,0,1,1);
   layout->addWidget(stopButton,  1,1,1,1);
   layout->addWidget(backwardButton, 2,0,1,1);
   layout->addWidget(forwardButton, 2,1,1,1);
+  layout->addWidget(rewindButton, 1,2,1,1);
+  layout->addWidget(infoButton, 2,2,1,1);
 
-  layout->addWidget(showCBPartitioningButton,1,2,1,1);
-  layout->addWidget(showTBPartitioningButton,2,2,1,1);
+  layout->addWidget(showCBPartitioningButton,1,3,1,1);
+  layout->addWidget(showTBPartitioningButton,2,3,1,1);
 
-  layout->addWidget(showPBPartitioningButton,1,3,1,1);
-  layout->addWidget(showPBPredModeButton,    2,3,1,1);
+  layout->addWidget(showPBPartitioningButton,1,4,1,1);
+  layout->addWidget(showPBPredModeButton,    2,4,1,1);
 
-  layout->addWidget(showIntraPredModeButton, 1,4,1,1);
-  layout->addWidget(showSlicesButton,        2,4,1,1);
-  layout->addWidget(showTilesButton,         1,5,1,1);
-  layout->addWidget(showQuantPYButton,       2,5,1,1);
+  layout->addWidget(showIntraPredModeButton, 1,5,1,1);
+  layout->addWidget(showSlicesButton,        2,5,1,1);
+  layout->addWidget(showTilesButton,         1,6,1,1);
+  layout->addWidget(showQuantPYButton,       2,6,1,1);
 
-  layout->addWidget(showMotionVecButton,     2,6,1,1);
-  layout->addWidget(showDecodedImageButton,  1,6,1,1);
+  layout->addWidget(showMotionVecButton,     2,7,1,1);
+  layout->addWidget(showDecodedImageButton,  1,7,1,1);
 
   setLayout(layout);
 

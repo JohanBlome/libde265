@@ -65,6 +65,7 @@ public slots:
   void stopDecoder();
   void singleStepDecoder();
   void singleStepBackDecoder();
+  void rewindDecoder();
 
   void showCBPartitioning(bool flag);
   void showTBPartitioning(bool flag);
@@ -76,6 +77,7 @@ public slots:
   void showTiles(bool flag);
   void showSlices(bool flag);
   void showDecodedImage(bool flag);
+  void showFrameInfo(bool flag);
 
 signals:
   void displayImage(QImage*);
@@ -111,9 +113,10 @@ private:
   bool   mShowMotionVec;
   bool   mShowTiles;
   bool   mShowSlices;
+  bool   mShowFrameInfo;
 
   void decoder_loop();
-
+  int  decode_single_step();
   void init_decoder(const char* filename);
   void free_decoder();
 
